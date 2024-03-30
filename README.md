@@ -1,5 +1,6 @@
 A non-cryptographic "vouching" system
 =====================================
+![Crates.io](https://img.shields.io/crates/v/raffle) ![docs.rs](https://img.shields.io/docsrs/raffle)
 
 The `raffle` library offers functionality similar to public key
 signatures, except without any pretense of cryptographic strength.
