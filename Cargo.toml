@@ -1,0 +1,25 @@
+[package]
+name = "raffle"
+version = "0.0.1"
+description = "A non-cryptographic 'vouching' system"
+edition = "2021"
+license = "0BSD"
+repository = "https://github.com/pkhuong/raffle"
+
+[[example]]
+name = "generate_raffle_parameters"
+crate-type = ["bin"]
+
+[dependencies]
+serde = { version = "1", optional = true, features = ["serde_derive"] }
+prost = { version = "0.12", optional = true }
+
+[features]
+# Derives `serde::Serialize` and `serde::Deserialize` for `raffle::Voucher`.
+serde = [ "dep:serde" ]
+prost = [ "dep:prost" ]
+default_features = []
+
+[dev-dependencies]
+blake3 = "1"
+rand = "0.8"
