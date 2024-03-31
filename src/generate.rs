@@ -28,14 +28,21 @@ const fn modinverse(a: u64) -> u64 {
 /// We check in 4 points, just to be clear.
 #[inline(never)] // make the function show up in profiles if it's an issue.
 const fn check_parameters_or_die(offset: u64, scale: u64, checking: (u64, u64)) {
-    use crate::vouch::vouch;
+    // Confirm that the Voucher for this `point` is accepted by `check`
+    const fn confirm(point: u64, offset: u64, scale: u64, checking: (u64, u64)) {
+        use crate::check::check;
+        use crate::vouch::vouch;
+
+        let voucher = vouch(offset, scale, checking, point);
+        assert!(check(checking.0, checking.1, point, voucher));
+    }
 
     // Each call to `vouch` internally checks that the voucher is correct.
-    let _ = vouch(offset, scale, checking, 0);
-    let _ = vouch(offset, scale, checking, 1);
-    let _ = vouch(offset, scale, checking, 2);
+    confirm(0, offset, scale, checking);
+    confirm(1, offset, scale, checking);
+    confirm(2, offset, scale, checking);
     // and a "random" point.
-    let _ = vouch(offset, scale, checking, 0x110d2ae90b38f555u64);
+    confirm(0x110d2ae90b38f555u64, offset, scale, checking);
 }
 
 /// Given `scale`, the multiplier for the vouching step, and `unoffset`,
