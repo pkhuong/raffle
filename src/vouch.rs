@@ -2,7 +2,7 @@ use crate::constparse::named_u64;
 use crate::constparse::parse_hex;
 
 /// The vouching multiplier is xor-ed with this constant.
-pub const VOUCHING_TAG: u64 = named_u64("Vouching");
+pub const VOUCHING_TAG: u64 = named_u64(b"Vouching", 0x676e696863756f56u64);
 
 /// Returns the voucher representation of `value`, given the vouching
 /// parameters `offset` and `scale`.

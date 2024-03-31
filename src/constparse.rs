@@ -2,25 +2,10 @@
 /// to u64 numbers at compile-time.
 
 /// Interprets the first up to 8 characters in `name` as a little-endian u64.
-pub const fn named_u64(name: &str) -> u64 {
-    let bytes = name.as_bytes();
-
-    const fn update(acc: u64, bytes: &[u8], idx: usize) -> u64 {
-        assert!(idx < bytes.len());
-        acc + (bytes[idx] as u64).wrapping_shl((8 * idx) as u32)
-    }
-
-    let mut acc = 0u64;
-    acc = update(acc, bytes, 0);
-    acc = update(acc, bytes, 1);
-    acc = update(acc, bytes, 2);
-    acc = update(acc, bytes, 3);
-    acc = update(acc, bytes, 4);
-    acc = update(acc, bytes, 5);
-    acc = update(acc, bytes, 6);
-    acc = update(acc, bytes, 7);
-
-    acc
+pub const fn named_u64(name: &[u8; 8], expected: u64) -> u64 {
+    let ret = u64::from_le_bytes(*name);
+    assert!(ret == expected);
+    ret
 }
 
 /// Parses ASCII encoded big-endian hex (e.g., the result of
@@ -71,9 +56,23 @@ pub const fn parse_hex(bytes: &[u8], base: usize) -> Option<u64> {
 #[test]
 fn test_named_u64() {
     // These are the three strings we care about.
-    assert_eq!(named_u64("Vouch!OK"), u64::from_le_bytes(*b"Vouch!OK"));
-    assert_eq!(named_u64("Checking"), u64::from_le_bytes(*b"Checking"));
-    assert_eq!(named_u64("Vouching"), u64::from_le_bytes(*b"Vouching"));
+    assert_eq!(u64::from_le_bytes(*b"Vouch!OK"), 0x4b4f216863756f56u64);
+    assert_eq!(
+        named_u64(b"Vouch!OK", 0x4b4f216863756f56u64),
+        u64::from_le_bytes(*b"Vouch!OK")
+    );
+
+    assert_eq!(u64::from_le_bytes(*b"Checking"), 0x676e696b63656843u64);
+    assert_eq!(
+        named_u64(b"Checking", 0x676e696b63656843u64),
+        u64::from_le_bytes(*b"Checking")
+    );
+
+    assert_eq!(u64::from_le_bytes(*b"Vouching"), 0x676e696863756f56u64);
+    assert_eq!(
+        named_u64(b"Vouching", 0x676e696863756f56u64),
+        u64::from_le_bytes(*b"Vouching")
+    );
 }
 
 #[test]

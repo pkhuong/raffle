@@ -4,10 +4,10 @@ use crate::constparse::parse_hex;
 
 /// The vouching and checking transform is such that
 ///   x + check(vouch(x)) == WANTED_SUM
-pub const WANTED_SUM: u64 = named_u64("Vouch!OK");
+pub const WANTED_SUM: u64 = named_u64(b"Vouch!OK", 0x4b4f216863756f56u64);
 
 /// The checking multiplier is xor-ed with this other constant.
-pub const CHECKING_TAG: u64 = named_u64("Checking");
+pub const CHECKING_TAG: u64 = named_u64(b"Checking", 0x676e696b63656843u64);
 
 /// Determines whether the `voucher` value was generated for
 /// `expected`, and with vouching parameters that correspond to the
