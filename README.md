@@ -33,3 +33,122 @@ The parameter space is also large enough that accidental collisions
 (i.e., `CheckingParameters` accept `Voucher`s for the wrong
 `VouchingParameters`) are much more likely to indicate hardware issues
 or deliberate action than mere bad luck or innocent bugs.
+
+Implementation details
+======================
+
+Internally, `raffle` generates pairs of affine functions in arithmetic
+modulo `2**64` of the form `vouch(x) = a * (x + b)` and `check(y) = c * (y + d)`
+such that `x + check(vouch(x)) = WANTED_SUM`.  Since the vouching
+and checking functions have the same simple structure and only differ
+in their parameters, we only have to worry about applying parameters
+in the wrong order.  We made sure the composition `check o vouch`
+isn't the identity function, so that flipping the application order,
+`vouch o check`, yields a different result.
+
+The `WANTED_SUM = 0x4b4f216863756f56 = 5426592808233693014`
+corresponds to the "Vouch!OK" string encoded as utf-8 (or ASCII
+bytes), and interpreted as a little-endian 64-bit integer.
+
+In addition, the multiplier for the vouching function (`a`) is stored
+in memory after xor-ing with `VOUCHING_TAG = 0x676e696863756f56`, the
+"Vouching" string interpreted as a little-endian integer; similarly,
+the multiplier for the checking function (`c`) is stored after xor-ing
+with `CHECKING_TAG = 0x676e696b63656843`, the "Checking" string
+interpreted as a little-endian integer.  The `xor` operations are
+linear, but in a different domain than modular arithmetic, so don't
+cancel out the care we took to avoid accidental matches when we swap
+the vouching and checking parameters.
+
+Checking constants are serialised with a "CHECK-" prefix, followed by
+the addend `d` as a 0-padded 16-character hexadecimal integer, another
+hyphen "-", and the multiplier `c` *after xoring `CHECKING_TAG` as 16
+hex characters.  For example, "CHECK-9bf723a6b538fe4a-1dddb95caa81d852"
+encodes the addend `d = 11238490594038316618` and multiplier
+`c = 0x1dddb95caa81d852 ^ 0x676e696b63656843 = 8841639431487402001`.
+
+Vouching constants are serialised with a "VOUCH-" prefix, followed by
+the vouching addend `b` as 16 hex characters, a "-", the vouching
+multiplier `a` as 16 hex characters, "-", the checking addend `d` as
+16 hex characters, "-", and the checking multiplier `c` as 16 hex characters.
+For example, "VOUCH-ecf8c191680e5394-a0474d8e2618d059-9bf723a6b538fe4a-1dddb95caa81d852"
+encodes the vouching addend `b = 17075610817435423636` and
+vouching multiplier `a = 0xa0474d8e2618d059 ^ 0x676e696863756f56 = 14351042259018694415`,
+and the same checking constants as earlier, addend `d = 11238490594038316618`
+and multiplier `c = 8841639431487402001`.
+
+Evaluating the vouching function at `0` yields
+`a * (0 + b) = 14351042259018694415 * 17075610817435423636 = 452582901498139052`  (mod `2**64`).
+We can then check that voucher `452582901498139052` with
+`c * (452582901498139052 + d) = 8841639431487402001 * (452582901498139052 + 11238490594038316618) = 5426592808233693014`
+(mod `2**64`).
+
+And, indeed, `0 + check(vouch(0)) = 0 + 5426592808233693014 = 5426592808233693014`, our `WANTED_SUM`.
+
+The composition of `vouch`ing and then `check`ing (two affine functions) is itself an affine function,
+so we only have to check one more point to confirm that `x + check(vouch(x)) = WANTED_SUM`.
+
+Evaluating at `x = u64::MAX` yields the voucher value `4548284716188996253`,
+and applying the checking function to `4548284716188996253` yields `5426592808233693015`.
+As expected, `5426592808233693015 + u64::MAX = 5426592808233693015 - 1 = 5426592808233693014 = WANTED_SUM`,
+in arithmetic modulo `2**64`.
+
+Interface design decisions
+--------------------------
+
+The expected usage is for writers to generate a message, compute a
+hash of that message (or take the message directly, if it's small),
+and generate a `Voucher` from the hash.  We have a dedicated wrapper
+type for `Voucher`s, to avoid mistaking them for actual (hash) values.
+
+Readers will accept a message, compute the message's hash (or take the
+message directly), and check that the `Voucher` corresponds to the
+hash before processing the message.  The `check`ing method only
+returns a success `bool`, rather than the result of the `check`ing
+affine function.  This makes it harder for applications to
+accidentally compare the wrong values (e.g., compare a voucher with a
+voucher).
+
+The match condition, `hash + check(voucher) == WANTED_SUM` (in
+modular arithmetic), is commutative in `hash` and `check(voucher)` to
+rule out implementation bugs where we swap the two values.
+
+The library doesn't have logic to convert checking parameters (`c` and
+`d`) to vouching parameters (`a` and `b`); it's not hard to do, but
+that would defeat the purpose of this vouching system.
+
+In fact, the library doesn't have logic to convert vouching parameters
+to checking parameters either!  The internal parameter generating
+function `derive_parameters` in `generate.rs` instead accepts the
+vouching multiplier `a` and the checking addend `d`, and computes the
+unique corresponding values for the vouching addend `b` and the
+checking multiplier `c`.
+
+We first let `c` be the complement of the multiplicative inverse of
+`a` in arithmetic modulo `2**64` (i.e., `a.wrapping_mul(c) == u64::MAX`),
+and then solve for `b`, given
+`WANTED_SUM = check(vouch(0)) = c(ab + d) = -b + cd` (`ac = -1`):
+`b = cd - WANTED_SUM`.
+
+Assertions
+----------
+
+The library asserts a lot internally. These assertions are *not* for
+error handling; they all correspond to mathematically provable
+properties that are expected to hold unless memory was corrupted (or
+to implement internal compile-time checks).
+
+1. in `constparse.rs`, `named_u64` is only used internally to show
+   that certain integer constants correspond to mnemonic strings.
+3. in `generate.rs`, `modinverse` checks that the Newton iterations
+   correctly generated the multiplicative inverse of its odd integer
+   input, in 64-bit modular arithmetic.
+3. in `generate.rs`, `derive_parameters` calls
+   `check_parameters_or_die` to confirm that the `Voucher` for four
+   different values is accepted by the `check`ing routine.  We check
+   at four points because `check(vouch(x))` is an affine function, so
+   two points suffice to show `x + check(vouch(x)) = WANTED_SUM`...
+   double that to be extra sure.
+4. in `vouch.rs`, each call to `vouch` confirms that the checking
+   parameters would accept the newly generated voucher, i.e., that the
+   vouching and checking parameters correspond to one another.
